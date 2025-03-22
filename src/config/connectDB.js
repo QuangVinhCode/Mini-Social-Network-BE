@@ -1,14 +1,37 @@
 import mongoose from "mongoose";
+import User from "../models/user.js";
+import bcrypt from "bcryptjs";
 
-const connectDB = async () => {
-    const mongoURI = process.env.DB_URL; // Thay "mydatabase" bằng tên cơ sở dữ liệu của bạn
-    try {
-        await mongoose.connect(mongoURI);
-        console.log("Kết nối tới MongoDB thành công!");
-    } catch (error) {
-        console.error("Lỗi kết nối MongoDB:", error.message);
-        process.exit(1); // Thoát nếu kết nối thất bại
+const createAdminAccount = async () => {
+  try {
+    const existingAdmin = await User.findOne({ username: "admin" });
+    if (existingAdmin) {
+      console.log("Admin account already exists.");
+      return;
     }
+
+    const hashedPassword = await bcrypt.hash("admin", 10);
+    const newAdmin = new User({
+      username: "admin",
+      email: "admin@example.com",
+      password: hashedPassword,
+      role: "admin",
+    });
+
+    await newAdmin.save();
+    console.log("✅ Admin account created successfully!");
+  } catch (error) {
+    console.error("❌ Error creating admin account:", error);
+  }
 };
 
-export default connectDB;
+export default async function connectDB() {
+  try {
+    await mongoose.connect(process.env.DB_URL);
+    console.log("✅ MongoDB connected successfully.");
+    await createAdminAccount(); // Gọi hàm tạo admin ngay sau khi kết nối DB
+  } catch (error) {
+    console.error("❌ MongoDB connection error:", error);
+    process.exit(1);
+  }
+}

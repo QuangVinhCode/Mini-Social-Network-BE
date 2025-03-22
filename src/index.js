@@ -7,16 +7,12 @@ import messageRoutes from "./routes/messageRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import {
-  setUserSocket,
-  removeUserSocket,
-  getUsersMap,
-  getSocketByUserId,
-} from "./config/socketMap.js"; // Nhập khẩu các hàm từ socketMap
 import { Server } from "socket.io";
 import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
+import redisClient from "./config/redisClient.js";
+
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT;
@@ -27,57 +23,58 @@ app.use("/src/img", express.static(path.join(__dirname, "src/img")));
 connectDB();
 app.use(cors({ origin: true }));
 app.use(bodyParser.json());
+
 const io = new Server(server, {
   cors: {
-    origin: "*", // Cần cấu hình chính xác cho môi trường production
+    origin: "*",
   },
 });
 app.set("io", io);
-let usersOnline = {};
+
 // Lắng nghe kết nối Socket.IO
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
-  // Nhận thông tin đăng ký người dùng
-  socket.on("register", (userId) => {
-    const id = getSocketByUserId(userId);
-    if (!id) {
-      setUserSocket(userId, socket.id);
+  socket.on("register", async (userId) => {
+    await redisClient.hSet("online_users", userId, socket.id);
+    console.log(`User ${userId} registered with socket ${socket.id}`);
+  });
 
-      console.log(`User ${userId} registered with socket ${socket.id}`);
-    } else {
-      console.log(`User cancel register`);
-    }
+  socket.on("user_online", async (userId) => {
+    await redisClient.hSet("online_users", userId, socket.id);
+    const usersOnline = await redisClient.hGetAll("online_users");
+    io.emit("online_status_update", usersOnline);
   });
-  socket.on("user_online", (userId) => {
-    usersOnline[userId] = true;
-    io.emit("online_status_update", usersOnline); // Gửi cập nhật trạng thái online cho tất cả người dùng
+
+  socket.on("online_status", async () => {
+    const usersOnline = await redisClient.hGetAll("online_users");
+    io.emit("online_status_update", usersOnline);
   });
-  socket.on("messageRead", (message) => {
-    // Lấy thông tin tin nhắn và tìm người gửi
+
+  socket.on("messageRead", async (message) => {
     if (message) {
-      const senderSocket = getSocketByUserId(message.senderId);
+      const senderSocket = await redisClient.hGet(
+        "online_users",
+        message.senderId
+      );
       if (senderSocket) {
-        io.to(senderSocket).emit("messageRead", message._id); // Thông báo tới người gửi
+        io.to(senderSocket).emit("messageRead", message._id);
+        await redisClient.hDel("unread_messages", message._id);
       }
     }
   });
-  // Xử lý ngắt kết nối
-  socket.on("disconnect", () => {
+
+  socket.on("disconnect", async () => {
     console.log("User disconnected:", socket.id);
-    let usersMap = getUsersMap();
-    usersMap.forEach((socketId, userId) => {
-      if (socketId === socket.id) {
-        removeUserSocket(userId); // Xóa socketId khỏi Map
-        console.log(`User ${userId} disconnected`);
-      }
-    });
+
+    const usersOnline = await redisClient.hGetAll("online_users");
     const userId = Object.keys(usersOnline).find(
       (id) => usersOnline[id] === socket.id
     );
     if (userId) {
-      delete usersOnline[userId];
-      io.emit("online_status_update", usersOnline); // Cập nhật lại trạng thái
+      await redisClient.hDel("online_users", userId);
+      console.log(`User ${userId} removed from online list`);
+      io.emit("online_status_update", usersOnline);
     }
   });
 });
@@ -87,6 +84,23 @@ app.use("/api/v1/messages", messageRoutes);
 app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/comments", commentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+
+const clearRedisOnExit = async () => {
+  console.log("Clearing Redis data before exit...");
+  await redisClient.del("online_users");
+  await redisClient.del("token_users");
+  console.log("Redis cleared!");
+};
+
+process.on("SIGINT", async () => {
+  await clearRedisOnExit();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  await clearRedisOnExit();
+  process.exit(0);
+});
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

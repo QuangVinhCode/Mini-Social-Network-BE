@@ -10,10 +10,12 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   findUsersBySimilarName,
+  getFriendsList,
+  getFriendRequestsList,
+  getFriendRequestsSentList,
 } from "../services/userService.js";
-import { getSocketByUserId } from "../config/socketMap.js";
 import { createNotification } from "../services/notificationService.js";
-import { addToken } from "../config/tokenMap.js";
+import redisClient from "../config/redisClient.js";
 
 export const createUserHandler = async (req, res) => {
   try {
@@ -47,10 +49,9 @@ export const updateUserHandler = async (req, res) => {
   try {
     const updateData = { ...req.body };
     if (req.files && req.files.length > 0) {
-      const imagePaths = req.files.map((file) => file.filename);
+      const imagePaths = req.files.map((file) => file.path);
       updateData["profile.avatar"] = imagePaths.join(",");
     }
-    console.log(updateData);
     const updatedUser = await updateUser(req.params.id, updateData);
 
     if (!updatedUser)
@@ -78,10 +79,11 @@ export const loginUserHandler = async (req, res) => {
   try {
     const { username, password } = req.body;
     const { user, token } = await loginUser(username, password);
-    addToken(user._id, token);
+    await redisClient.hSet("token_users", user._id.toString(), token);
     return res.status(200).json({
       id: user._id,
       username: user.username,
+      role: user.role,
       token,
     });
   } catch (error) {
@@ -102,9 +104,13 @@ export const sendFriendRequestHandler = async (req, res, io) => {
       source: targetId,
     };
     const notification = await createNotification(data);
-    console.log(getSocketByUserId(targetId));
-    io.to(getSocketByUserId(targetId)).emit("sendFriendRequest", user);
-    io.to(getSocketByUserId(targetId)).emit("newNotification", notification);
+    const authorSocket = await redisClient.hGet(
+      "online_users",
+      post.authorId._id.toString()
+    );
+    console.log("authorSocket", authorSocket);
+    io.to(authorSocket).emit("sendFriendRequest", user);
+    io.to(authorSocket).emit("newNotification", notification);
     return res.status(200).json({ friend });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -124,9 +130,13 @@ export const cancelFriendRequestHandler = async (req, res, io) => {
       source: targetId,
     };
     const notification = await createNotification(data);
-    console.log(getSocketByUserId(targetId));
-    io.to(getSocketByUserId(targetId)).emit("cancelFriendRequest", user);
-    io.to(getSocketByUserId(targetId)).emit("newNotification", notification);
+    const authorSocket = await redisClient.hGet(
+      "online_users",
+      post.authorId._id.toString()
+    );
+    console.log("authorSocket", authorSocket);
+    io.to(authorSocket).emit("cancelFriendRequest", user);
+    io.to(authorSocket).emit("newNotification", notification);
     return res.status(200).json({ friend });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -146,9 +156,13 @@ export const acceptFriendRequestHandler = async (req, res, io) => {
       source: requesterId,
     };
     const notification = await createNotification(data);
-    console.log(getSocketByUserId(requesterId));
-    io.to(getSocketByUserId(requesterId)).emit("acceptFriendRequest", user);
-    io.to(getSocketByUserId(requesterId)).emit("newNotification", notification);
+    const requesterSocket = await redisClient.hGet(
+      "online_users",
+      post.authorId._id.toString()
+    );
+    console.log("requesterSocket", requesterSocket);
+    io.to(requesterSocket).emit("acceptFriendRequest", user);
+    io.to(requesterSocket).emit("newNotification", notification);
     return res.status(200).json({ friend });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -167,9 +181,13 @@ export const declineFriendRequestHandler = async (req, res, io) => {
       source: requesterId,
     };
     const notification = await createNotification(data);
-    console.log(getSocketByUserId(requesterId));
-    io.to(getSocketByUserId(requesterId)).emit("declineFriendRequest", user);
-    io.to(getSocketByUserId(requesterId)).emit("newNotification", notification);
+    const requesterSocket = await redisClient.hGet(
+      "online_users",
+      post.authorId._id.toString()
+    );
+    console.log("requesterSocket", requesterSocket);
+    io.to(requesterSocket).emit("declineFriendRequest", user);
+    io.to(requesterSocket).emit("newNotification", notification);
     return res.status(200).json({ friend });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -183,5 +201,48 @@ export const findUsersBySimilarNameHandler = async (req, res) => {
     return res.status(200).json(users);
   } catch (error) {
     return res.status(400).json({ message: error.message });
+  }
+};
+
+export const logoutHandler = async (req, res, io) => {
+  try {
+    const { userId } = req.body;
+
+    await redisClient.hDel("online_users", userId);
+    await redisClient.hDel("token_users", userId);
+    io.emit("online_status_update", await redisClient.hGetAll("online_users"));
+
+    res.status(200).json({ message: "Đăng xuất thành công!" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi đăng xuất", error: error.message });
+  }
+};
+
+export const getFriendsListHandler = async (req, res) => {
+  try {
+    const friends = await getFriendsList(req.params.userId);
+    res.status(200).json(friends);
+  } catch (error) {
+    res.status(500).json({ message: "Error retrieving friends list", error });
+  }
+};
+
+export const getFriendRequestsListHandler = async (req, res) => {
+  try {
+    const friends = await getFriendRequestsList(req.params.userId);
+    res.status(200).json(friends);
+  } catch (error) {
+    res.status(500).json({ message: "Error retrieving friends list", error });
+  }
+};
+
+export const getFriendRequestsSentListHandler = async (req, res) => {
+  try {
+    const friends = await getFriendRequestsSentList(req.params.userId);
+    res.status(200).json(friends);
+  } catch (error) {
+    res.status(500).json({ message: "Error retrieving friends list", error });
   }
 };

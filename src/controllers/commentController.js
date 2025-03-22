@@ -1,4 +1,3 @@
-import { getSocketByUserId } from "../config/socketMap.js";
 import {
   createComment,
   getCommentById,
@@ -7,10 +6,12 @@ import {
   deleteComment,
   toggleLike,
   replyToComment,
+  getComments,
 } from "../services/commentService.js";
 import { createNotification } from "../services/notificationService.js";
 import { getPostById } from "../services/postService.js";
 import { getUserById } from "../services/userService.js";
+import redisClient from "../config/redisClient.js";
 
 export const createCommentHandler = async (req, res) => {
   try {
@@ -18,10 +19,6 @@ export const createCommentHandler = async (req, res) => {
     const comment = await createComment({ postId, userId, content });
     const post = await getPostById(postId);
     const user = await getUserById(userId);
-    console.log("__________");
-    console.log(user);
-    console.log(post);
-    console.log("__________");
     if (comment) {
       const data = {
         userId: post.authorId._id,
@@ -35,11 +32,13 @@ export const createCommentHandler = async (req, res) => {
         source: post._id,
       };
       const notification = await createNotification(data);
-      if (getSocketByUserId(post.authorId._id.toString())) {
-        io.to(getSocketByUserId(post.authorId._id.toString())).emit(
-          "newNotification",
-          notification
-        );
+      const authorSocket = await redisClient.hGet(
+        "online_users",
+        post.authorId._id.toString()
+      );
+      console.log("authorSocket", authorSocket);
+      if (authorSocket) {
+        io.to(authorSocket).emit("newNotification", notification);
       } else {
         console.log("Không online");
       }
@@ -67,6 +66,15 @@ export const replyToCommentHandler = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to create reply", error: error.message });
+  }
+};
+
+export const getCommentsHandler = async (req, res) => {
+  try {
+    const comment = await getComments();
+    res.status(200).json(comment);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };
 

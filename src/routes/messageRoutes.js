@@ -36,9 +36,9 @@ messageRouter.get(
 
 // API đánh dấu tin nhắn đã đọc
 messageRouter.patch(
-  "/mark-read/:messageId",
+  "/mark-read",
   authenticateToken,
-  markMessageAsReadHandler
+  (req, res) => markMessageAsReadHandler(req, res, req.app.get("io"))
 );
 
 // API xóa tin nhắn

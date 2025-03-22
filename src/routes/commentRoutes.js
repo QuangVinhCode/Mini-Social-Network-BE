@@ -7,6 +7,7 @@ import {
   deleteCommentHandler,
   toggleLikeHandler,
   replyToCommentHandler,
+  getCommentsHandler,
 } from "../controllers/commentController.js";
 import { authenticateToken } from "../middlewares/authMiddleware.js";
 
@@ -19,6 +20,9 @@ commentRouter.post("/reply",authenticateToken, replyToCommentHandler);
 
 // Lấy bình luận theo ID
 commentRouter.get("/:id", getCommentByIdHandler);
+
+//Lấy danh sách bình luận
+commentRouter.get("/", getCommentsHandler);
 
 // Lấy tất cả bình luận của một bài viết
 commentRouter.get("/post/:postId", getCommentsByPostIdHandler);

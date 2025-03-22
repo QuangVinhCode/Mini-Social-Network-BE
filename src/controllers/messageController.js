@@ -1,4 +1,4 @@
-import { getSocketByUserId } from "../config/socketMap.js";
+import redisClient from "../config/redisClient.js";
 import {
   sendMessage,
   getConversation,
@@ -24,8 +24,14 @@ export const sendMessageHandler = async (req, res, io) => {
       source: user._id,
     };
     const notification = await createNotification(data);
-    io.to(getSocketByUserId(receiverId)).emit("newMessage", message);
-    io.to(getSocketByUserId(receiverId)).emit("newNotification", notification);
+
+    // 🔥 Lấy socket từ Redis thay vì từ socketMap
+    const receiverSocket = await redisClient.hGet("online_users", receiverId);
+
+    if (receiverSocket) {
+      io.to(receiverSocket).emit("newMessage", message);
+      io.to(receiverSocket).emit("newNotification", notification);
+    }
 
     res
       .status(201)
@@ -74,12 +80,26 @@ export const getUnreadMessagesHandler = async (req, res) => {
   }
 };
 
-export const markMessageAsReadHandler = async (req, res) => {
+export const markMessageAsReadHandler = async (req, res, io) => {
   try {
-    const { messageId } = req.params;
-    const updatedMessage = await markMessageAsRead(messageId);
+    const { id } = req.body;
+    console.log("markMessage ", id);
+    const updatedMessage = await markMessageAsRead(id);
+
     if (!updatedMessage)
       return res.status(404).json({ message: "Tin nhắn không tồn tại." });
+    console.log("markMessage ", updatedMessage.senderId.toString());
+    const senderSocket = await redisClient.hGet(
+      "online_users",
+      updatedMessage.senderId.toString()
+    );
+    console.log("senderSocket",senderSocket);
+    if (senderSocket) {
+      io.to(senderSocket).emit("messageRead", id);
+    } else {
+      console.log(`Socket ${senderSocket} không hợp lệ, xóa khỏi Redis.`);
+      await redisClient.hDel("online_users", updatedMessage.senderId); // Xóa socket rác
+    }
     res.status(201).json(updatedMessage);
   } catch (error) {
     res.status(400).json({ message: error.message });

@@ -21,6 +21,10 @@ export const replyToComment = async ({
   return await reply.save();
 };
 
+export const getComments = async () => {
+  return await Comment.find({});
+};
+
 // Lấy bình luận theo ID
 export const getCommentById = async (commentId) => {
   return await Comment.findById(commentId)

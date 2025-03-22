@@ -1,13 +1,17 @@
 import mongoose from "mongoose";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const userSchema = new mongoose.Schema(
   {
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    role: { type: String, required: true,default:"user" },
     profile: {
       name: { type: String },
-      avatar: { type: String, default: "logo.png" },
+      avatar: { type: String, default: process.env.DEFAULT_LOGO },
       bio: { type: String },
       location: { type: String },
     },

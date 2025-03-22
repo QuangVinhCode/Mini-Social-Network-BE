@@ -13,8 +13,6 @@ export const getImageByNameHandler = async (req, res) => {
   try {
     const { imageName } = req.params;
     const imagePath = await getImageByName(imageName);
-
-    // Trả về ảnh trực tiếp
     res.sendFile(imagePath);
   } catch (error) {
     res.status(404).json({ message: error.message });
@@ -24,12 +22,8 @@ export const getImageByNameHandler = async (req, res) => {
 export const createPostHandler = async (req, res) => {
   try {
     const { content, authorId } = req.body;
-    console.log(req.files);
-    // Lấy danh sách file upload
-    const imagePaths = req.files.map((file) => file.filename);
-
+    const imagePaths = req.files.map((file) => file.path);
     const newPost = await createPost({ authorId, content, images: imagePaths });
-
     res
       .status(201)
       .json({ message: "Post created successfully", post: newPost });
@@ -49,7 +43,7 @@ export const getPostByIdHandler = async (req, res) => {
   }
 };
 
-// Lấy tất cả bài viết
+
 export const getAllPostsHandler = async (req, res) => {
   try {
     const posts = await getAllPosts();
@@ -63,7 +57,6 @@ export const updatePostHandler = async (req, res) => {
   try {
     const { content } = req.body;
 
-    // Lấy danh sách file upload
     const imagePaths = req.files.map((file) => file.path);
 
     const updatedPost = await updatePost(req.params.id, {
@@ -77,7 +70,6 @@ export const updatePostHandler = async (req, res) => {
   }
 };
 
-// Xóa bài viết
 export const deletePostHandler = async (req, res) => {
   try {
     const deletedPost = await deletePost(req.params.id);

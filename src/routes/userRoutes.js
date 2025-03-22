@@ -11,6 +11,10 @@ import {
   acceptFriendRequestHandler,
   declineFriendRequestHandler,
   findUsersBySimilarNameHandler,
+  logoutHandler,
+  getFriendsListHandler,
+  getFriendRequestsListHandler,
+  getFriendRequestsSentListHandler,
 } from "../controllers/userController.js";
 
 import { authenticateToken } from "../middlewares/authMiddleware.js";
@@ -46,18 +50,35 @@ userRouter.post("/request-add-friend", authenticateToken, (req, res) =>
   sendFriendRequestHandler(req, res, req.app.get("io"))
 );
 
-userRouter.delete("/:userId/request-remove-friend/:targetId", authenticateToken, (req, res) =>
-  cancelFriendRequestHandler(req, res, req.app.get("io"))
+userRouter.delete(
+  "/:userId/request-remove-friend/:targetId",
+  authenticateToken,
+  (req, res) => cancelFriendRequestHandler(req, res, req.app.get("io"))
 );
 
 userRouter.post("/add-friend", authenticateToken, (req, res) =>
   acceptFriendRequestHandler(req, res, req.app.get("io"))
 );
 
-userRouter.delete("/:userId/remove-friend/:requesterId", authenticateToken, (req, res) =>
-  declineFriendRequestHandler(req, res, req.app.get("io"))
+userRouter.delete(
+  "/:userId/remove-friend/:requesterId",
+  authenticateToken,
+  (req, res) => declineFriendRequestHandler(req, res, req.app.get("io"))
 );
 
 userRouter.get("/search/:name", findUsersBySimilarNameHandler);
+
+userRouter.patch("/logout", authenticateToken, (req, res) =>
+  logoutHandler(req, res, req.app.get("io"))
+);
+
+userRouter.get("/friends/:userId", getFriendsListHandler);
+
+userRouter.get("/friend-requests/:userId", getFriendRequestsListHandler);
+
+userRouter.get(
+  "/friend-requests-sent/:userId",
+  getFriendRequestsSentListHandler
+);
 
 export default userRouter;
