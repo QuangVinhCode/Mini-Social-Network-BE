@@ -18,7 +18,7 @@ export const getConversation = async (userId1, userId2) => {
       { senderId: userId2, receiverId: userId1 },
     ],
   })
-    .sort({ sentAt: 1 }) // Sắp xếp theo thứ tự thời gian tăng dần
+    .sort({ createdAt: 1 }) // Sắp xếp theo thứ tự thời gian tăng dần
     .lean(); // Chuyển dữ liệu sang plain JavaScript object
 };
 
@@ -49,7 +49,7 @@ export const getLastMessages = async (userId) => {
         },
       },
       {
-        $sort: { sentAt: -1 }, // Sort by the most recent message first
+        $sort: { createdAt: -1 }, // Sort by the most recent message first
       },
       {
         $group: {
@@ -112,7 +112,7 @@ export const getLastMessages = async (userId) => {
     // Optionally, sort by most recent conversations first (if required)
     const sortedMessages = allMessages.sort((a, b) => {
       // Sort by most recent message sent time
-      return new Date(b.lastMessage.sentAt) - new Date(a.lastMessage.sentAt);
+      return new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt);
     });
 
     return sortedMessages;
